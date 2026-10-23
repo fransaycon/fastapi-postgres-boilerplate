@@ -1,0 +1,2 @@
+db:5432:*:postgres:postgres
+db-test:5432:*:postgres:postgres

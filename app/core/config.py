@@ -15,7 +15,13 @@ def _split_origins(value: str | list[str]) -> list[str]:
     return value
 
 
+def _blank_to_none(value: str | None) -> str | None:
+    """`FOO=` in a .env file arrives as "", which is not the same as unset."""
+    return value.strip() or None if isinstance(value, str) else value
+
+
 CorsOrigins = Annotated[list[AnyHttpUrl], NoDecode, BeforeValidator(_split_origins)]
+OptionalStr = Annotated[str | None, BeforeValidator(_blank_to_none)]
 
 
 class Settings(BaseSettings):
@@ -42,7 +48,9 @@ class Settings(BaseSettings):
     REFRESH_COOKIE_NAME: str = "refresh_token"
     COOKIE_SECURE: bool = True
     COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
-    COOKIE_DOMAIN: str | None = None
+    COOKIE_DOMAIN: OptionalStr = None
+    # Only enable behind a proxy you control, otherwise clients can spoof their IP.
+    TRUST_PROXY_HEADERS: bool = False
 
     # Database
     POSTGRES_HOST: str = "localhost"

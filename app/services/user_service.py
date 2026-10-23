@@ -6,6 +6,7 @@ from app.core.pagination import Page, PaginationParams
 from app.core.permissions import DEFAULT_ROLE
 from app.core.security import hash_password, verify_password
 from app.models.user import User
+from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserAdminCreate, UserAdminUpdate, UserCreate, UserSelfUpdate
 
@@ -21,8 +22,9 @@ def anonymized_email(user_id: uuid.UUID) -> str:
 class UserService:
     """Business rules for the user domain."""
 
-    def __init__(self, repository: UserRepository) -> None:
+    def __init__(self, repository: UserRepository, sessions: SessionRepository) -> None:
         self.repository = repository
+        self.sessions = sessions
 
     async def _claim_email(self, email: str, *, exclude: uuid.UUID | None = None) -> str:
         normalized = email.lower()
@@ -77,7 +79,11 @@ class UserService:
         if (new_password := values.pop("password", None)) is not None:
             values["hashed_password"] = hash_password(new_password)
 
-        return await self.repository.update(user, values)
+        updated = await self.repository.update(user, values)
+        if new_password is not None:
+            # A password change invalidates every device, including this one.
+            await self.sessions.revoke_all_for_user(user.id)
+        return updated
 
     async def update_as_admin(self, user_id: uuid.UUID, payload: UserAdminUpdate) -> User:
         user = await self.get(user_id)
@@ -90,14 +96,16 @@ class UserService:
 
     async def set_password(self, user_id: uuid.UUID, password: str) -> User:
         user = await self.get(user_id)
-        return await self.repository.update(user, {"hashed_password": hash_password(password)})
+        updated = await self.repository.update(user, {"hashed_password": hash_password(password)})
+        await self.sessions.revoke_all_for_user(user.id)
+        return updated
 
     async def soft_delete(self, user_id: uuid.UUID, *, acting_user_id: uuid.UUID) -> User:
         if user_id == acting_user_id:
             raise ConflictError("You cannot delete your own account")
 
         user = await self.get(user_id)
-        return await self.repository.update(
+        deleted = await self.repository.update(
             user,
             {
                 "deleted_at": datetime.now(UTC),
@@ -105,3 +113,5 @@ class UserService:
                 "email": anonymized_email(user.id),
             },
         )
+        await self.sessions.revoke_all_for_user(user.id)
+        return deleted

@@ -24,7 +24,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
 
 
-def _create_token(subject: str, token_type: TokenType, expires_delta: timedelta) -> str:
+def _create_token(
+    subject: str,
+    token_type: TokenType,
+    expires_delta: timedelta,
+    extra_claims: dict[str, Any] | None = None,
+) -> str:
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": subject,
@@ -34,6 +39,8 @@ def _create_token(subject: str, token_type: TokenType, expires_delta: timedelta)
         "exp": now + expires_delta,
         "jti": str(uuid.uuid4()),
     }
+    if extra_claims:
+        payload.update(extra_claims)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -41,8 +48,13 @@ def create_access_token(subject: str) -> str:
     return _create_token(subject, "access", timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
 
 
-def create_refresh_token(subject: str) -> str:
-    return _create_token(subject, "refresh", timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS))
+def create_refresh_token(subject: str, *, session_id: str, token_version: str) -> str:
+    return _create_token(
+        subject,
+        "refresh",
+        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        {"sid": session_id, "ver": token_version},
+    )
 
 
 def decode_token(token: str, expected_type: TokenType) -> dict[str, Any]:

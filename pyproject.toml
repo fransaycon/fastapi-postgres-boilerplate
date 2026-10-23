@@ -28,6 +28,8 @@ dev = [
     "asgi-lifespan>=2.1.0",
     "aiosqlite>=0.20.0",
     "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+    "commitizen>=4.0.0",
 ]
 
 [build-system]
@@ -85,3 +87,11 @@ docstring-code-format = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_provider = "pep621"
+update_changelog_on_bump = true
+major_version_zero = true
+changelog_merge_prerelease = true

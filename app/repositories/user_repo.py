@@ -10,8 +10,6 @@ from app.models.user import User
 
 
 class UserRepository:
-    """Data access layer for `User`. Contains no business rules."""
-
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 

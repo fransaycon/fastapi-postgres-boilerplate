@@ -25,7 +25,17 @@ uv run alembic upgrade head
 docker compose up -d --build          # Postgres + API with hot reload
 docker compose exec api alembic upgrade head
 docker compose --profile test up -d db-test   # throwaway Postgres for tests
+
+uv run pre-commit install             # one-time after cloning
+uv run pre-commit run --all-files
+uv run cz commit                      # guided conventional commit
 ```
+
+Git hooks run via pre-commit: `pre-commit` (ruff check/format, file hygiene, `uv lock`),
+`commit-msg` (Commitizen conventional-commit check), `pre-push` (pytest). Commit messages
+must match `type(scope): subject` — `feat`, `fix`, `docs`, `refactor`, `test`, `chore`,
+`build`, `ci`, `perf`, `style`, `revert`, `bump`. Hook revisions in
+`.pre-commit-config.yaml` are pinned; bump with `uv run pre-commit autoupdate`.
 
 Host ports are overridable: `POSTGRES_PORT`, `API_PORT`, `TEST_POSTGRES_PORT`.
 
@@ -57,6 +67,29 @@ user = result.first()
   `BACKEND_CORS_ORIGINS=a,b` raises `SettingsError`.
 - Derived values use `@computed_field` + `@property` (e.g. `SQLALCHEMY_DATABASE_URI`).
 - Importing `app.main` without a `SECRET_KEY` raises a validation error by design.
+- `FOO=` in a `.env` file yields `""`, not `None`. Optional string settings use the
+  `OptionalStr` annotation (a `BeforeValidator` mapping blank to `None`) so
+  `COOKIE_DOMAIN=` behaves like unset.
+- The `.env` file is deliberately **not** mounted into the `api` container. Compose's
+  `env_file:` injects the values into the process environment instead, so
+  `Path(".env").exists()` is False in the container while settings still resolve
+  correctly. That is intended, not a bug.
+- Compose reads `env_file:` at **container creation**. After editing `.env` run
+  `docker compose up -d`; `docker compose restart` keeps the old values and
+  `uvicorn --reload` only watches Python files. Locally the process must restart too,
+  since `settings` is cached with `@lru_cache`.
+
+## pgAdmin
+
+`docker compose up` starts pgAdmin on `${PGADMIN_PORT:-5050}` with both databases
+pre-registered from `docker/pgadmin/servers.json` plus a `pgpass` file.
+
+- Registration happens **only on first creation of the `pgadmin_data` volume**. After
+  editing `servers.json`, remove that volume and recreate the container or nothing
+  changes.
+- pgAdmin ignores a `pgpass` that is group- or world-readable, so the entrypoint copies it
+  to `/tmp/pgpass` and `chmod 600`s it. A directly mounted file keeps host permissions.
+- The `test (throwaway)` server only connects while `--profile test` is running.
 
 ## Security
 

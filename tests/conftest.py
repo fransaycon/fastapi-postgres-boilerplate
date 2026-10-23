@@ -24,8 +24,10 @@ from app.core.database import get_db
 from app.core.permissions import Role
 from app.main import app as fastapi_app
 from app.models.user import User
+from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserCreate
+from app.services.session_service import SessionService
 from app.services.user_service import UserService
 
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
@@ -86,7 +88,12 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 @pytest.fixture
 def user_service(db_session: AsyncSession) -> UserService:
-    return UserService(UserRepository(db_session))
+    return UserService(UserRepository(db_session), SessionRepository(db_session))
+
+
+@pytest.fixture
+def session_service(db_session: AsyncSession) -> SessionService:
+    return SessionService(SessionRepository(db_session))
 
 
 @pytest.fixture

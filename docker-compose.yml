@@ -60,5 +60,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  pgadmin:
+    image: dpage/pgadmin4:9.9
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_DISABLE_POSTFIX: "True"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "cp /pgadmin4/pgpass.src /tmp/pgpass && chmod 600 /tmp/pgpass && exec /entrypoint.sh"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - ./docker/pgadmin/pgpass:/pgadmin4/pgpass.src:ro
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  pgadmin_data:

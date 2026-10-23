@@ -38,6 +38,34 @@ docker compose exec api alembic revision --autogenerate -m "create users table"
 docker compose exec api alembic upgrade head
 ```
 
+| Service | URL | Notes |
+| --- | --- | --- |
+| API | http://localhost:8000 | `/docs` when `DEBUG=true` |
+| pgAdmin | http://localhost:5050 | both databases pre-registered |
+
+### pgAdmin
+
+Sign in with `PGADMIN_EMAIL` / `PGADMIN_PASSWORD` from `.env` (defaults
+`admin@example.com` / `admin`). Both servers are already registered and the passwords are
+supplied via [docker/pgadmin/pgpass](docker/pgadmin/pgpass) — no connection setup needed.
+
+| Registered server | Compose service | Available when |
+| --- | --- | --- |
+| `app (dev)` | `db` | always |
+| `test (throwaway)` | `db-test` | only under `--profile test` |
+
+Server registration happens **only when the `pgadmin_data` volume is first created**. If
+you edit [docker/pgadmin/servers.json](docker/pgadmin/servers.json), re-import with:
+
+```bash
+docker compose down pgadmin
+docker volume rm fastapi-boilerplate_pgadmin_data
+docker compose up -d pgadmin
+```
+
+This setup is for local development only — it disables the pgAdmin master password and
+ships a plaintext `pgpass`. Do not reuse it anywhere reachable from a network.
+
 ### Locally
 
 Requires a Postgres reachable at the `POSTGRES_*` values in `.env`. You can run just the
@@ -85,6 +113,38 @@ uv run alembic upgrade head
 docker compose logs -f api
 docker compose down -v   # stop and delete the postgres volume
 ```
+
+## Git hooks & commit conventions
+
+[pre-commit](https://pre-commit.com/) replaces husky *and* lint-staged — hooks receive
+only the staged files, and unstaged work is stashed while they run.
+
+```bash
+uv run pre-commit install      # one-time, after cloning
+uv run pre-commit run --all-files
+uv run pre-commit autoupdate   # bump pinned hook revisions
+```
+
+| Stage | Runs |
+| --- | --- |
+| `pre-commit` | whitespace/EOF/YAML/TOML checks, private-key & merge-conflict detection, `ruff check --fix`, `ruff format`, `uv lock` |
+| `commit-msg` | Commitizen conventional-commit validation |
+| `pre-push` | `pytest` |
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) and
+are enforced by [Commitizen](https://commitizen-tools.github.io/commitizen/):
+
+```bash
+uv run cz commit    # interactive prompt that builds the message for you
+uv run cz bump      # bump version + tag + update CHANGELOG from commit history
+```
+
+```text
+feat(users): add admin management endpoints
+fix(auth): reject refresh tokens used as access tokens
+```
+
+Skip hooks only when you genuinely must: `git commit --no-verify`.
 
 ## Layering rules
 

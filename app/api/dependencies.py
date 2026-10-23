@@ -6,13 +6,16 @@ from fastapi import Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import AuthenticationError, PermissionDeniedError
 from app.core.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, PaginationParams
 from app.core.permissions import Permission, has_permission
 from app.core.security import TokenError, decode_token
 from app.models.user import User
+from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
+from app.services.session_service import ClientInfo, SessionService
 from app.services.user_service import UserService
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -21,10 +24,29 @@ DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
 def get_user_service(session: DbSession) -> UserService:
-    return UserService(UserRepository(session))
+    return UserService(UserRepository(session), SessionRepository(session))
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+
+
+def get_session_service(session: DbSession) -> SessionService:
+    return SessionService(SessionRepository(session))
+
+
+SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
+
+
+def get_client_info(request: Request) -> ClientInfo:
+    forwarded = request.headers.get("x-forwarded-for") if settings.TRUST_PROXY_HEADERS else None
+    if forwarded:
+        ip = forwarded.split(",")[0].strip()
+    else:
+        ip = request.client.host if request.client else None
+    return ClientInfo(ip_address=ip, user_agent=request.headers.get("user-agent"))
+
+
+ClientInfoDep = Annotated[ClientInfo, Depends(get_client_info)]
 
 
 def get_pagination(
@@ -57,7 +79,6 @@ async def get_current_user(
     if not user.is_active:
         raise AuthenticationError("Inactive user")
 
-    # Exposed so the rate limiter can key on the authenticated principal.
     request.state.user_id = str(user.id)
     return user
 
