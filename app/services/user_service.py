@@ -1,6 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
+from app.core.audit import AuditAction, build_changes
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.core.pagination import Page, PaginationParams
 from app.core.permissions import DEFAULT_ROLE
@@ -9,6 +10,7 @@ from app.models.user import User
 from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserAdminCreate, UserAdminUpdate, UserCreate, UserSelfUpdate
+from app.services.audit_service import AuditService
 
 # Reserved TLD (RFC 2606) so an anonymized address can never route anywhere.
 DELETED_EMAIL_DOMAIN = "deleted.invalid"
@@ -22,9 +24,15 @@ def anonymized_email(user_id: uuid.UUID) -> str:
 class UserService:
     """Business rules for the user domain."""
 
-    def __init__(self, repository: UserRepository, sessions: SessionRepository) -> None:
+    def __init__(
+        self,
+        repository: UserRepository,
+        sessions: SessionRepository,
+        audit: AuditService,
+    ) -> None:
         self.repository = repository
         self.sessions = sessions
+        self.audit = audit
 
     async def _claim_email(self, email: str, *, exclude: uuid.UUID | None = None) -> str:
         normalized = email.lower()
@@ -52,7 +60,6 @@ class UserService:
 
     async def authenticate(self, email: str, password: str) -> User:
         user = await self.repository.get_by_email(email.lower())
-        # Hash a dummy value when the user is missing to keep timing constant.
         hashed = user.hashed_password if user else hash_password("invalid-placeholder")
         if not verify_password(password, hashed) or user is None:
             raise AuthenticationError("Incorrect email or password")
@@ -79,20 +86,35 @@ class UserService:
         if (new_password := values.pop("password", None)) is not None:
             values["hashed_password"] = hash_password(new_password)
 
+        self._record_update(actor_id=user.id, user=user, values=values)
         updated = await self.repository.update(user, values)
         if new_password is not None:
             # A password change invalidates every device, including this one.
             await self.sessions.revoke_all_for_user(user.id)
         return updated
 
-    async def update_as_admin(self, user_id: uuid.UUID, payload: UserAdminUpdate) -> User:
+    async def update_as_admin(
+        self, user_id: uuid.UUID, payload: UserAdminUpdate, *, acting_user_id: uuid.UUID
+    ) -> User:
         user = await self.get(user_id)
         values = payload.model_dump(exclude_unset=True)
 
         if (new_email := values.pop("email", None)) is not None:
             values["email"] = await self._claim_email(new_email, exclude=user.id)
 
+        self._record_update(actor_id=acting_user_id, user=user, values=values)
         return await self.repository.update(user, values)
+
+    def _record_update(self, *, actor_id: uuid.UUID, user: User, values: dict[str, object]) -> None:
+        """No-op updates are not events, so nothing is written when nothing changed."""
+        changes = build_changes(user, values)
+        if changes:
+            self.audit.record(
+                AuditAction.USER_UPDATED,
+                actor_id=actor_id,
+                resource_id=user.id,
+                changes=changes,
+            )
 
     async def set_password(self, user_id: uuid.UUID, password: str) -> User:
         user = await self.get(user_id)
@@ -105,6 +127,7 @@ class UserService:
             raise ConflictError("You cannot delete your own account")
 
         user = await self.get(user_id)
+        self.audit.record(AuditAction.USER_DELETED, actor_id=acting_user_id, resource_id=user.id)
         deleted = await self.repository.update(
             user,
             {

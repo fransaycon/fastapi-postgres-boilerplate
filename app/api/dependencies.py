@@ -13,8 +13,10 @@ from app.core.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, PaginationPara
 from app.core.permissions import Permission, has_permission
 from app.core.security import TokenError, decode_token
 from app.models.user import User
+from app.repositories.audit_repo import AuditRepository
 from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
+from app.services.audit_service import AuditService
 from app.services.session_service import ClientInfo, SessionService
 from app.services.user_service import UserService
 
@@ -23,8 +25,15 @@ bearer_scheme = HTTPBearer(auto_error=False)
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
-def get_user_service(session: DbSession) -> UserService:
-    return UserService(UserRepository(session), SessionRepository(session))
+def get_audit_service(session: DbSession) -> AuditService:
+    return AuditService(AuditRepository(session))
+
+
+AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
+
+
+def get_user_service(session: DbSession, audit: AuditServiceDep) -> UserService:
+    return UserService(UserRepository(session), SessionRepository(session), audit)
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]

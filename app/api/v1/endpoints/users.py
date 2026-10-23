@@ -90,9 +90,10 @@ async def update_user(
     request: Request,
     user_id: uuid.UUID,
     payload: UserAdminUpdate,
+    current_user: CurrentUser,
     service: UserServiceDep,
 ) -> UserPublic:
-    user = await service.update_as_admin(user_id, payload)
+    user = await service.update_as_admin(user_id, payload, acting_user_id=current_user.id)
     return UserPublic.model_validate(user)
 
 

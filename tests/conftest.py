@@ -24,15 +24,15 @@ from app.core.database import get_db
 from app.core.permissions import Role
 from app.main import app as fastapi_app
 from app.models.user import User
+from app.repositories.audit_repo import AuditRepository
 from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.user import UserCreate
+from app.services.audit_service import AuditService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
 
 SQLITE_URL = "sqlite+aiosqlite:///:memory:"
-# Point at the compose `db-test` service to run the suite against real Postgres:
-#   TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5433/test
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", SQLITE_URL)
 TEST_PASSWORD = "correct-horse-battery-staple"
 
@@ -87,8 +87,13 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 
 
 @pytest.fixture
-def user_service(db_session: AsyncSession) -> UserService:
-    return UserService(UserRepository(db_session), SessionRepository(db_session))
+def audit_service(db_session: AsyncSession) -> AuditService:
+    return AuditService(AuditRepository(db_session))
+
+
+@pytest.fixture
+def user_service(db_session: AsyncSession, audit_service: AuditService) -> UserService:
+    return UserService(UserRepository(db_session), SessionRepository(db_session), audit_service)
 
 
 @pytest.fixture
@@ -97,7 +102,7 @@ def session_service(db_session: AsyncSession) -> SessionService:
 
 
 @pytest.fixture
-async def test_user(user_service: UserService) -> User:
+async def git(user_service: UserService) -> User:
     return await user_service.register(
         UserCreate(email="user@example.com", full_name="Test User", password=TEST_PASSWORD)
     )

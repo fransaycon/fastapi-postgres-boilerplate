@@ -5,11 +5,13 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.dependencies import (
+    AuditServiceDep,
     ClientInfoDep,
     CurrentUser,
     SessionServiceDep,
     UserServiceDep,
 )
+from app.core.audit import AuditAction
 from app.core.config import settings
 from app.core.exceptions import AuthenticationError
 from app.core.rate_limit import limiter
@@ -80,10 +82,12 @@ async def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     service: UserServiceDep,
     sessions: SessionServiceDep,
+    audit: AuditServiceDep,
     client: ClientInfoDep,
 ) -> Token:
     """OAuth2 password flow — the `username` field carries the user's email."""
     user = await service.authenticate(form_data.username, form_data.password)
+    audit.record(AuditAction.USER_LOGIN, actor_id=user.id, resource_id=user.id)
     _, refresh_token = await sessions.start(user.id, client)
     _set_refresh_cookie(response, refresh_token)
     return Token(
