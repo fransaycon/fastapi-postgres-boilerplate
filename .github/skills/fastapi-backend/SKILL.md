@@ -199,14 +199,13 @@ Rules:
   Adding a *role* needs a migration only because of the column's CHECK constraint.
 
 Admin user management lives on `/api/v1/users` (list, create, read, update, set password,
-soft delete). Self-service is `/users/me` only. The service layer has separate methods per
-audience — `register`/`update_self` vs `create_as_admin`/`update_as_admin`/`set_password`/
-`soft_delete` — so privilege boundaries are explicit rather than conditional.
+soft delete). There is **no public registration and no self-service update** — the only
+thing a signed-in non-admin can do is `GET /users/me`, which returns `UserBase`
+(email and full name only). The first admin is created directly in the database.
 
-Self-service vs administrative updates are separate schemas: `UserSelfUpdate` structurally
-omits `role`/`is_active`; `UserUpdate` extends it for admin use. Never sanitize by nulling
-privileged fields — `model_copy(update={"x": None})` marks the field as *set*, so
-`exclude_unset` passes `None` straight into a `NOT NULL` column.
+Never sanitize by nulling privileged fields — `model_copy(update={"x": None})` marks the
+field as *set*, so `exclude_unset` passes `None` straight into a `NOT NULL` column. Use a
+narrower schema instead, the way `UserAdminUpdate` exposes only `email` and `role`.
 
 ## Rate limiting
 

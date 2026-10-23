@@ -4,12 +4,11 @@ from datetime import UTC, datetime
 from app.core.audit import AuditAction, build_changes
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.core.pagination import Page, PaginationParams
-from app.core.permissions import DEFAULT_ROLE
 from app.core.security import hash_password, verify_password
 from app.models.user import User
 from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
-from app.schemas.user import UserAdminCreate, UserAdminUpdate, UserCreate, UserSelfUpdate
+from app.schemas.user import UserAdminCreate, UserAdminUpdate
 from app.services.audit_service import AuditService
 
 # Reserved TLD (RFC 2606) so an anonymized address can never route anywhere.
@@ -41,15 +40,6 @@ class UserService:
             raise ConflictError("A user with this email already exists")
         return normalized
 
-    async def register(self, payload: UserCreate) -> User:
-        user = User(
-            email=await self._claim_email(payload.email),
-            full_name=payload.full_name,
-            hashed_password=hash_password(payload.password),
-            role=DEFAULT_ROLE,
-        )
-        return await self.repository.create(user)
-
     async def create_as_admin(self, payload: UserAdminCreate) -> User:
         user = User(
             email=await self._claim_email(payload.email),
@@ -75,23 +65,6 @@ class UserService:
 
     async def list(self, params: PaginationParams) -> Page[User]:
         return await self.repository.list(params)
-
-    async def update_self(self, user_id: uuid.UUID, payload: UserSelfUpdate) -> User:
-        user = await self.get(user_id)
-        values = payload.model_dump(exclude_unset=True)
-
-        if (new_email := values.pop("email", None)) is not None:
-            values["email"] = await self._claim_email(new_email, exclude=user.id)
-
-        if (new_password := values.pop("password", None)) is not None:
-            values["hashed_password"] = hash_password(new_password)
-
-        self._record_update(actor_id=user.id, user=user, values=values)
-        updated = await self.repository.update(user, values)
-        if new_password is not None:
-            # A password change invalidates every device, including this one.
-            await self.sessions.revoke_all_for_user(user.id)
-        return updated
 
     async def update_as_admin(
         self, user_id: uuid.UUID, payload: UserAdminUpdate, *, acting_user_id: uuid.UUID

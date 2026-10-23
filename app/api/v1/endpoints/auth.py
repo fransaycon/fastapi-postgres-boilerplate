@@ -17,7 +17,7 @@ from app.core.exceptions import AuthenticationError
 from app.core.rate_limit import limiter
 from app.core.security import TokenError, create_access_token, decode_token
 from app.schemas.session import SessionPublic
-from app.schemas.user import Token, UserCreate, UserPublic
+from app.schemas.user import Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,13 +65,6 @@ def _read_refresh_token(token: str | None) -> tuple[uuid.UUID, uuid.UUID, uuid.U
         )
     except (TokenError, ValueError, KeyError) as exc:
         raise AuthenticationError("Invalid refresh token") from exc
-
-
-@router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
-@limiter.limit(settings.RATE_LIMIT_AUTH)
-async def register(request: Request, payload: UserCreate, service: UserServiceDep) -> UserPublic:
-    user = await service.register(payload)
-    return UserPublic.model_validate(user)
 
 
 @router.post("/login", response_model=Token)

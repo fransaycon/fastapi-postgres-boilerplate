@@ -27,7 +27,7 @@ from app.models.user import User
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.session_repo import SessionRepository
 from app.repositories.user_repo import UserRepository
-from app.schemas.user import UserCreate
+from app.schemas.user import UserAdminCreate
 from app.services.audit_service import AuditService
 from app.services.session_service import SessionService
 from app.services.user_service import UserService
@@ -102,18 +102,17 @@ def session_service(db_session: AsyncSession) -> SessionService:
 
 
 @pytest.fixture
-async def git(user_service: UserService) -> User:
-    return await user_service.register(
-        UserCreate(email="user@example.com", full_name="Test User", password=TEST_PASSWORD)
+async def test_user(user_service: UserService) -> User:
+    return await user_service.create_as_admin(
+        UserAdminCreate(email="user@example.com", password=TEST_PASSWORD, role=Role.USER)
     )
 
 
 @pytest.fixture
 async def admin_user(user_service: UserService) -> User:
-    user = await user_service.register(
-        UserCreate(email="admin@example.com", full_name="Admin User", password=TEST_PASSWORD)
+    return await user_service.create_as_admin(
+        UserAdminCreate(email="admin@example.com", password=TEST_PASSWORD, role=Role.ADMIN)
     )
-    return await user_service.repository.update(user, {"role": Role.ADMIN})
 
 
 async def _login(client: AsyncClient, user: User) -> dict[str, str]:

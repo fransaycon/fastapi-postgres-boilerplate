@@ -6,12 +6,9 @@ from app.schemas.user import (
     TokenPayload,
     UserAdminCreate,
     UserAdminUpdate,
-    UserCreate,
+    UserBase,
     UserLogin,
-    UserMe,
     UserPublic,
-    UserSelfUpdate,
-    UserUpdate,
 )
 
 __all__ = [
@@ -22,10 +19,7 @@ __all__ = [
     "TokenPayload",
     "UserAdminCreate",
     "UserAdminUpdate",
-    "UserCreate",
+    "UserBase",
     "UserLogin",
-    "UserMe",
     "UserPublic",
-    "UserSelfUpdate",
-    "UserUpdate",
 ]

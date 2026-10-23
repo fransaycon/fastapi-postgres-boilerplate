@@ -17,38 +17,13 @@ async def test_health(client: AsyncClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-async def test_register_returns_public_user_without_password(client: AsyncClient) -> None:
+async def test_registration_endpoint_does_not_exist(client: AsyncClient) -> None:
+    """Accounts are provisioned by admins via POST /users only."""
     response = await client.post(
         "/api/v1/auth/register",
-        json={
-            "email": "new@example.com",
-            "full_name": "New User",
-            "password": "a-very-long-password",
-        },
+        json={"email": "new@example.com", "password": "a-very-long-password"},
     )
-    assert response.status_code == 201
-
-    body = response.json()
-    assert body["email"] == "new@example.com"
-    assert body["is_active"] is True
-    assert "password" not in body
-    assert "hashed_password" not in body
-
-
-async def test_register_rejects_duplicate_email(client: AsyncClient, test_user: User) -> None:
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={"email": test_user.email, "password": "another-long-password"},
-    )
-    assert response.status_code == 409
-
-
-async def test_register_rejects_short_password(client: AsyncClient) -> None:
-    response = await client.post(
-        "/api/v1/auth/register",
-        json={"email": "short@example.com", "password": "short"},
-    )
-    assert response.status_code == 422
+    assert response.status_code == 404
 
 
 async def test_login_issues_tokens_and_refresh_cookie(client: AsyncClient, test_user: User) -> None:
@@ -97,7 +72,7 @@ async def test_me_returns_current_user(
 ) -> None:
     response = await client.get("/api/v1/users/me", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json()["id"] == str(test_user.id)
+    assert response.json()["email"] == test_user.email
 
 
 async def test_access_token_is_rejected_as_refresh_token(

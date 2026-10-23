@@ -19,12 +19,11 @@ def test_role_permission_map_is_explicit() -> None:
     assert has_permission(Role.USER, Permission.PROFILE_WRITE)
 
 
-async def test_me_exposes_resolved_permissions(
-    client: AsyncClient, auth_headers: dict[str, str]
+async def test_me_returns_only_identity_fields(
+    client: AsyncClient, auth_headers: dict[str, str], test_user: User
 ) -> None:
     body = (await client.get(f"{USERS}/me", headers=auth_headers)).json()
-    assert body["role"] == Role.USER
-    assert body["permissions"] == sorted([Permission.PROFILE_READ, Permission.PROFILE_WRITE])
+    assert body == {"email": test_user.email, "full_name": test_user.full_name}
 
 
 async def test_admin_endpoints_are_forbidden_for_regular_users(

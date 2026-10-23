@@ -93,36 +93,23 @@ async def test_update_with_no_actual_change_writes_nothing(
     assert updates == []
 
 
-async def test_self_update_records_the_user_as_its_own_actor(
+async def test_admin_password_reset_is_not_audited(
     client: AsyncClient,
     db_session: AsyncSession,
-    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
     test_user: User,
 ) -> None:
+    """Password resets are outside the audited action set, and must never leak the value."""
     response = await client.patch(
-        f"{USERS}/me", headers=auth_headers, json={"full_name": "Renamed"}
+        f"{USERS}/{test_user.id}/password",
+        headers=admin_headers,
+        json={"password": "a-brand-new-password"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 204
 
-    updates = [e for e in await _entries(db_session) if e.action == AuditAction.USER_UPDATED]
-    assert len(updates) == 1
-    assert updates[0].actor_id == updates[0].resource_id == test_user.id
-    assert updates[0].changes == [{"attribute": "full_name", "from": "Test User", "to": "Renamed"}]
-
-
-async def test_password_change_never_leaks_into_changes(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    auth_headers: dict[str, str],
-) -> None:
-    response = await client.patch(
-        f"{USERS}/me", headers=auth_headers, json={"password": "a-brand-new-password"}
-    )
-    assert response.status_code == 200
-
-    serialized = str([e.changes for e in await _entries(db_session)])
-    assert "password" not in serialized
-    assert "a-brand-new-password" not in serialized
+    entries = await _entries(db_session)
+    assert [e for e in entries if e.action == AuditAction.USER_UPDATED] == []
+    assert "a-brand-new-password" not in str([e.changes for e in entries])
 
 
 async def test_delete_is_audited(

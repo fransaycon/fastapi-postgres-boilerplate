@@ -156,13 +156,17 @@ Skip hooks only when you genuinely must: `git commit --no-verify`.
 
 ## Auth flow
 
-1. `POST /api/v1/auth/register` — create an account.
-2. `POST /api/v1/auth/login` — form-encoded `username` (email) + `password`. Returns an access
+**There is no public registration.** Every account is provisioned by an admin through
+`POST /api/v1/users`, so the only unauthenticated endpoint is login.
+
+1. `POST /api/v1/auth/login` — form-encoded `username` (email) + `password`. Returns an access
    token in the body and sets an HttpOnly refresh cookie scoped to `/api/v1/auth`.
-3. `POST /api/v1/auth/refresh` — exchanges the cookie for a new access token and rotates the
+2. `POST /api/v1/auth/refresh` — exchanges the cookie for a new access token and rotates the
    refresh cookie.
-4. `POST /api/v1/auth/logout` — clears the refresh cookie.
-5. `GET /api/v1/users/me` — protected, requires `Authorization: Bearer <access_token>`.
+3. `POST /api/v1/auth/logout` — revokes this device's session and clears the cookie.
+4. `GET /api/v1/users/me` — protected, requires `Authorization: Bearer <access_token>`.
+
+Bootstrapping the first admin is a database operation, not an API call — see below.
 
 Set `COOKIE_SECURE=true` and `COOKIE_SAMESITE=none` when the API and frontend are on
 different origins over HTTPS.
@@ -183,7 +187,8 @@ Guard routes on a permission, never a role:
 @router.get("", dependencies=[Depends(require_permission(Permission.USERS_READ))])
 ```
 
-New users get `DEFAULT_ROLE` (`user`). Promote one with:
+New users default to `DEFAULT_ROLE` (`user`) unless the creating admin says otherwise.
+Promote one directly when bootstrapping:
 
 ```bash
 docker compose exec db psql -U postgres -d app \

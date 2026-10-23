@@ -16,9 +16,8 @@ from app.schemas.user import (
     PasswordUpdate,
     UserAdminCreate,
     UserAdminUpdate,
-    UserMe,
+    UserBase,
     UserPublic,
-    UserSelfUpdate,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -28,22 +27,10 @@ RequireUsersWrite = Depends(require_permission(Permission.USERS_WRITE))
 RequireUsersDelete = Depends(require_permission(Permission.USERS_DELETE))
 
 
-@router.get("/me", response_model=UserMe)
+@router.get("/me", response_model=UserBase)
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
-async def read_current_user(request: Request, current_user: CurrentUser) -> UserMe:
-    return UserMe.from_user(current_user)
-
-
-@router.patch("/me", response_model=UserPublic)
-@limiter.limit(settings.RATE_LIMIT_DEFAULT)
-async def update_current_user(
-    request: Request,
-    payload: UserSelfUpdate,
-    current_user: CurrentUser,
-    service: UserServiceDep,
-) -> UserPublic:
-    user = await service.update_self(current_user.id, payload)
-    return UserPublic.model_validate(user)
+async def read_current_user(request: Request, current_user: CurrentUser) -> UserBase:
+    return UserBase.model_validate(current_user)
 
 
 @router.get("", response_model=Page[UserPublic], dependencies=[RequireUsersRead])
