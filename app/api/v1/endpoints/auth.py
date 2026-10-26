@@ -90,7 +90,7 @@ async def login(
 
 
 @router.post("/refresh", response_model=Token)
-@limiter.limit(settings.RATE_LIMIT_AUTH)
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 async def refresh(
     request: Request,
     response: Response,
@@ -105,7 +105,6 @@ async def refresh(
     if user is None or not user.is_active:
         raise AuthenticationError("Invalid refresh token")
 
-    # Rotates `ver`; replaying a superseded token revokes the session instead.
     _, new_token = await sessions.rotate(user_id, session_id, token_version, client)
     _set_refresh_cookie(response, new_token)
     return Token(

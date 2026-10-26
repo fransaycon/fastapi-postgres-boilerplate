@@ -44,6 +44,7 @@ class UserService:
         user = User(
             email=await self._claim_email(payload.email),
             hashed_password=hash_password(payload.password),
+            full_name=payload.full_name,
             role=payload.role,
         )
         return await self.repository.create(user)

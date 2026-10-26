@@ -19,12 +19,14 @@ class UserBase(BaseModel):
 
 class UserAdminCreate(BaseModel):
     email: EmailStr = Field(max_length=320, examples=["user@example.com"])
+    full_name: str | None = Field(default=None, max_length=255)
     password: str = PASSWORD_FIELD
     role: Role = Role.USER
 
 
 class UserAdminUpdate(BaseModel):
     email: EmailStr | None = Field(default=None, max_length=320)
+    full_name: str | None = Field(default=None, max_length=255)
     role: Role | None = None
 
 
@@ -38,6 +40,7 @@ class UserPublic(UserBase):
     email: str
     id: uuid.UUID
     is_active: bool
+    full_name: str | None = None
     role: Role
     created_at: datetime
     deleted_at: datetime | None = None
