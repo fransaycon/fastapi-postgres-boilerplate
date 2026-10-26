@@ -1,8 +1,21 @@
-from httpx import AsyncClient
+from datetime import UTC, datetime, timedelta
 
+from httpx import AsyncClient
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.models.user import User
 from tests.conftest import TEST_PASSWORD
+
+WRONG_PASSWORD = "definitely-wrong-password"
+
+
+async def _attempt_login(client: AsyncClient, email: str, password: str) -> int:
+    response = await client.post(
+        "/api/v1/auth/login", data={"username": email, "password": password}
+    )
+    return response.status_code
 
 
 def test_limiter_is_enabled_during_tests() -> None:
@@ -89,3 +102,59 @@ async def test_list_users_requires_superuser(
 ) -> None:
     response = await client.get("/api/v1/users", headers=auth_headers)
     assert response.status_code == 403
+
+
+async def test_login_locks_out_after_max_failed_attempts(
+    client: AsyncClient, test_user: User
+) -> None:
+    for _ in range(settings.LOGIN_MAX_ATTEMPTS):
+        assert await _attempt_login(client, test_user.email, WRONG_PASSWORD) == 401
+
+    # The correct password is refused too, which is what makes it a lockout.
+    assert await _attempt_login(client, test_user.email, TEST_PASSWORD) == 401
+
+
+async def test_successful_login_resets_attempts(
+    client: AsyncClient, db_session: AsyncSession, test_user: User
+) -> None:
+    for _ in range(settings.LOGIN_MAX_ATTEMPTS - 1):
+        assert await _attempt_login(client, test_user.email, WRONG_PASSWORD) == 401
+
+    assert await _attempt_login(client, test_user.email, TEST_PASSWORD) == 200
+
+    await db_session.refresh(test_user)
+    assert test_user.login_attempts == 0
+    assert test_user.last_failed_login_at is None
+    assert test_user.last_logged_in_at is not None
+
+
+async def test_failed_attempts_expire_after_the_window(
+    client: AsyncClient, db_session: AsyncSession, test_user: User
+) -> None:
+    for _ in range(settings.LOGIN_MAX_ATTEMPTS):
+        assert await _attempt_login(client, test_user.email, WRONG_PASSWORD) == 401
+
+    test_user.last_failed_login_at = datetime.now(UTC) - timedelta(
+        minutes=settings.LOGIN_LOCKOUT_MINUTES + 1
+    )
+    db_session.add(test_user)
+    await db_session.commit()
+
+    assert await _attempt_login(client, test_user.email, TEST_PASSWORD) == 200
+
+
+async def test_counter_restarts_when_failures_are_spread_out(
+    client: AsyncClient, db_session: AsyncSession, test_user: User
+) -> None:
+    assert await _attempt_login(client, test_user.email, WRONG_PASSWORD) == 401
+
+    test_user.last_failed_login_at = datetime.now(UTC) - timedelta(
+        minutes=settings.LOGIN_LOCKOUT_MINUTES + 1
+    )
+    db_session.add(test_user)
+    await db_session.commit()
+
+    assert await _attempt_login(client, test_user.email, WRONG_PASSWORD) == 401
+
+    await db_session.refresh(test_user)
+    assert test_user.login_attempts == 1

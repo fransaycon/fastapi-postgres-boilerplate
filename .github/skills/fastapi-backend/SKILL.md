@@ -101,6 +101,12 @@ pre-registered from `docker/pgadmin/servers.json` plus a `pgpass` file.
   `/refresh`. Access tokens are returned in the body only.
 - `authenticate()` hashes a dummy value when the email is unknown so response timing does
   not reveal account existence.
+- Login lockout lives in `UserService.authenticate`, not slowapi: after
+  `LOGIN_MAX_ATTEMPTS` (3) failures within `LOGIN_LOCKOUT_MINUTES` (30) the account is
+  refused even with the right password. `login_attempts` / `last_failed_login_at` track
+  the window, a success resets both and stamps `last_logged_in_at`. A locked account
+  returns the *same* message as a bad password, otherwise the response confirms the
+  address exists.
 - `/docs` and the OpenAPI schema are disabled unless `DEBUG` is true.
 
 ## Errors

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Login lockout
+    LOGIN_MAX_ATTEMPTS: int = 3
+    LOGIN_LOCKOUT_MINUTES: int = 30
+
     # Refresh token cookie
     REFRESH_COOKIE_NAME: str = "refresh_token"
     COOKIE_SECURE: bool = True

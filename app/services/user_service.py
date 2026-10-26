@@ -1,7 +1,8 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.core.audit import AuditAction, build_changes
+from app.core.config import settings
 from app.core.exceptions import AuthenticationError, ConflictError, NotFoundError
 from app.core.pagination import Page, PaginationParams
 from app.core.security import hash_password, verify_password
@@ -14,10 +15,22 @@ from app.services.audit_service import AuditService
 # Reserved TLD (RFC 2606) so an anonymized address can never route anywhere.
 DELETED_EMAIL_DOMAIN = "deleted.invalid"
 
+# Reused for a locked account too: a distinct message would confirm the address exists.
+INVALID_CREDENTIALS = "Incorrect email or password"
+
 
 def anonymized_email(user_id: uuid.UUID) -> str:
     """Unique by construction, so freeing the old address cannot break the email index."""
     return f"deleted+{user_id}@{DELETED_EMAIL_DOMAIN}"
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite drops tzinfo on round-trip, so normalize before any arithmetic."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _lockout_window() -> timedelta:
+    return timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
 
 
 class UserService:
@@ -52,11 +65,40 @@ class UserService:
     async def authenticate(self, email: str, password: str) -> User:
         user = await self.repository.get_by_email(email.lower())
         hashed = user.hashed_password if user else hash_password("invalid-placeholder")
-        if not verify_password(password, hashed) or user is None:
-            raise AuthenticationError("Incorrect email or password")
+        password_matches = verify_password(password, hashed)
+        now = datetime.now(UTC)
+
+        if user is not None and self._is_locked_out(user, now):
+            raise AuthenticationError(INVALID_CREDENTIALS)
+        if user is None or not password_matches:
+            if user is not None:
+                await self._record_failed_login(user, now)
+            raise AuthenticationError(INVALID_CREDENTIALS)
         if not user.is_active:
             raise AuthenticationError("Inactive user")
-        return user
+
+        return await self.repository.update(
+            user,
+            {"login_attempts": 0, "last_failed_login_at": None, "last_logged_in_at": now},
+        )
+
+    @staticmethod
+    def _is_locked_out(user: User, now: datetime) -> bool:
+        if user.login_attempts < settings.LOGIN_MAX_ATTEMPTS or user.last_failed_login_at is None:
+            return False
+        return now - _as_utc(user.last_failed_login_at) < _lockout_window()
+
+    async def _record_failed_login(self, user: User, now: datetime) -> None:
+        """Attempts expire with the window, so isolated typos never accumulate into a lock."""
+        previous = user.last_failed_login_at
+        within_window = previous is not None and now - _as_utc(previous) < _lockout_window()
+        await self.repository.update(
+            user,
+            {
+                "login_attempts": user.login_attempts + 1 if within_window else 1,
+                "last_failed_login_at": now,
+            },
+        )
 
     async def get(self, user_id: uuid.UUID) -> User:
         user = await self.repository.get_by_id(user_id)

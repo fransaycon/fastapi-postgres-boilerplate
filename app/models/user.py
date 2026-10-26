@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, Integer, func
 from sqlalchemy import Enum as SAEnum
 from sqlmodel import Column, Field, SQLModel
 
@@ -30,6 +30,19 @@ class User(SQLModel, table=True):
             server_default=DEFAULT_ROLE.value,
             index=True,
         ),
+    )
+    last_logged_in_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    login_attempts: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default="0"),
+    )
+    # Anchors the lockout window; without it consecutive failures could never expire.
+    last_failed_login_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
     )
     created_at: datetime = Field(
         default_factory=utc_now,
