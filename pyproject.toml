@@ -1,5 +1,5 @@
 [project]
-name = "fastapi-boilerplate"
+name = "fastapi-postgres-boilerplate"
 version = "0.1.0"
 description = "Production-ready FastAPI backend boilerplate"
 readme = "README.md"

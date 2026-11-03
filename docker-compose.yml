@@ -1,4 +1,4 @@
-name: fastapi-boilerplate
+name: fastapi-postgres-boilerplate
 
 x-db-env: &db-env
   POSTGRES_USER: ${POSTGRES_USER:-postgres}
